@@ -6,11 +6,10 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const libsql = createClient({
-  url: 'file:./dev.db',
-});
+// Next.js Turbopack might change CWD, so let's try to be explicit if possible
+const url = process.env.DATABASE_URL || 'file:./dev.db';
 
-const adapter = new PrismaLibSql(libsql);
+const adapter = new PrismaLibSql({ url });
 
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter });
 
