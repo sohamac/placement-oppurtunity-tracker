@@ -10,6 +10,11 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  
+  // Settings State
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
 
   // Fetch emails on load if authenticated
   const fetchEmails = async () => {
@@ -18,7 +23,10 @@ export default function Dashboard() {
       const res = await fetch("/api/emails");
       if (res.ok) {
         const data = await res.json();
-        setEmails(data);
+        setEmails(data.emails || []);
+        if (data.geminiApiKey) {
+          setApiKey(data.geminiApiKey);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -41,12 +49,58 @@ export default function Dashboard() {
         const data = await res.json();
         alert(`Successfully synced ${data.processedCount} new emails!`);
         fetchEmails(); // Refresh list
+      } else {
+         alert("Failed to sync emails.");
       }
     } catch (err) {
       console.error(err);
       alert("Failed to sync emails.");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    setSavingKey(true);
+    try {
+      const res = await fetch("/api/user/key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey }),
+      });
+      if (res.ok) {
+        alert("API Key saved securely!");
+        setShowSettings(false);
+      } else {
+        alert("Failed to save API key.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error saving API key.");
+    } finally {
+      setSavingKey(false);
+    }
+  };
+
+  const handleStatusChange = async (emailId: string, newStatus: string) => {
+    // Optimistic update
+    setEmails(emails.map(e => e.id === emailId ? { ...e, status: newStatus } : e));
+    
+    try {
+      const res = await fetch(`/api/emails/${emailId}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) {
+        // Revert on failure
+        fetchEmails();
+        alert("Failed to update status.");
+      }
+    } catch (err) {
+      console.error(err);
+      fetchEmails();
+      alert("Error updating status.");
     }
   };
 
@@ -64,7 +118,7 @@ export default function Dashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: `Interview: ${selectedEvent.company} - ${selectedEvent.role}`,
+          title: `Interview: ${selectedEvent.company || 'Placement'} - ${selectedEvent.role || ''}`,
           date: selectedEvent.date,
           time: selectedEvent.time,
           description: selectedEvent.summary
@@ -72,7 +126,7 @@ export default function Dashboard() {
       });
       
       if (res.ok) {
-        alert(`Event for ${selectedEvent.company} scheduled!`);
+        alert(`Event for ${selectedEvent.company || 'the interview'} scheduled!`);
         closeModal();
       } else {
         alert("Failed to add to calendar.");
@@ -80,16 +134,6 @@ export default function Dashboard() {
     } catch (err) {
       console.error(err);
       alert("Error adding event.");
-    }
-  };
-
-  const getStatusClass = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'applied': return 'status-applied';
-      case 'shortlisted': return 'status-shortlisted';
-      case 'interviewing': return 'status-interviewing';
-      case 'rejected': return 'status-rejected';
-      default: return 'status-applied';
     }
   };
 
@@ -114,74 +158,89 @@ export default function Dashboard() {
   }
 
   return (
-    <div className={`${styles.dashboard} animate-fade-in`}>
-      <header className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Welcome, {session?.user?.name?.split(' ')[0] || 'User'}</h1>
-          <p className={styles.subtitle}>AI-Powered Email Parsing & Calendar Sync</p>
-        </div>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <button 
-            className="btn btn-primary" 
-            onClick={handleSync}
-            disabled={syncing}
-          >
-            {syncing ? "Syncing..." : "Sync Emails"}
-          </button>
-          <button className="btn btn-secondary" onClick={() => signOut()}>
-            Logout
-          </button>
-        </div>
-      </header>
+    <>
+      <div className={styles.dashboard}>
+        <header className={`${styles.header} animate-fade-in`}>
+          <div>
+            <h1 className={styles.title}>Welcome, {session?.user?.name?.split(' ')[0] || 'User'}</h1>
+            <p className={styles.subtitle}>AI-Powered Email Parsing & Calendar Sync</p>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <button 
+              className="btn btn-secondary" 
+              onClick={() => setShowSettings(true)}
+              title="Settings"
+            >
+              ⚙️ Settings
+            </button>
+            <button 
+              className="btn btn-primary" 
+              onClick={handleSync}
+              disabled={syncing}
+            >
+              {syncing ? (
+                <>
+                  <div className={styles.spinner}></div>
+                  Syncing...
+                </>
+              ) : "Sync Emails"}
+            </button>
+            <button className="btn btn-secondary" onClick={() => signOut()}>
+              Logout
+            </button>
+          </div>
+        </header>
 
-      <section className={styles.statsGrid}>
-        <div className={`glass-card ${styles.statCard}`}>
-          <span className={styles.statLabel}>Total Applications</span>
-          <span className={styles.statValue}>{emails.length}</span>
-        </div>
-        <div className={`glass-card ${styles.statCard}`}>
-          <span className={styles.statLabel}>Shortlisted</span>
-          <span className={styles.statValue}>{emails.filter(e => e.status.toLowerCase() === 'shortlisted').length}</span>
-        </div>
-        <div className={`glass-card ${styles.statCard}`}>
-          <span className={styles.statLabel}>Interviews</span>
-          <span className={styles.statValue}>{emails.filter(e => e.status.toLowerCase() === 'interviewing').length}</span>
-        </div>
-      </section>
+        <section className={`${styles.statsGrid} animate-fade-in`}>
+          <div className={`glass-card ${styles.statCard}`}>
+            <span className={styles.statLabel}>Total Applications</span>
+            <span className={styles.statValue}>{emails.length}</span>
+          </div>
+          <div className={`glass-card ${styles.statCard}`}>
+            <span className={styles.statLabel}>Shortlisted</span>
+            <span className={styles.statValue}>{emails.filter(e => e.status?.toLowerCase() === 'shortlisted').length}</span>
+          </div>
+          <div className={`glass-card ${styles.statCard}`}>
+            <span className={styles.statLabel}>Interviews</span>
+            <span className={styles.statValue}>{emails.filter(e => e.status?.toLowerCase() === 'interviewing').length}</span>
+          </div>
+        </section>
 
-      <section>
-        <h2 className={styles.sectionTitle}>Recent Updates</h2>
-        <div className={`glass-panel ${styles.dataTableContainer}`}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Company</th>
-                <th>Status</th>
-                <th>Date / Time</th>
-                <th>AI Summary</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && <tr><td colSpan={5} style={{textAlign: 'center'}}>Loading...</td></tr>}
-              {!loading && emails.length === 0 && (
-                 <tr>
-                   <td colSpan={5} style={{textAlign: 'center', padding: '2rem'}}>
-                     No placement emails found. Click "Sync Emails" to fetch.
-                   </td>
-                 </tr>
-              )}
-              {emails.map((email) => (
-                <tr key={email.id}>
-                  <td>
-                    <strong>{email.company}</strong>
-                    <br />
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{email.role || '-'}</span>
-                  </td>
-                  <td>
-                    <span className={`status-badge ${getStatusClass(email.status)}`}>
-                      {email.status}
-                    </span>
+        <section className="animate-fade-in">
+          <h2 className={styles.sectionTitle}>Recent Updates</h2>
+          <div className={`glass-panel ${styles.dataTableContainer}`}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Subject</th>
+                  <th>Date / Time</th>
+                  <th>AI Summary</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading && <tr><td colSpan={5} style={{textAlign: 'center'}}>Loading...</td></tr>}
+                {!loading && emails.length === 0 && (
+                   <tr>
+                     <td colSpan={5} style={{textAlign: 'center', padding: '2rem'}}>
+                       No placement emails found in the last 2 months. Click "Sync Emails" to fetch.
+                     </td>
+                   </tr>
+                )}
+                {emails.map((email) => (
+                  <tr key={email.id}>
+                    <td style={{ maxWidth: '250px' }}>
+                      <strong>
+                        <a href={`https://mail.google.com/mail/u/0/#inbox/${email.emailId}`} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline', color: 'inherit' }}>
+                          {email.subject}
+                        </a>
+                      </strong>
+                    {email.company && email.company !== 'Unknown Company' && (
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                        {email.company} {email.role ? `- ${email.role}` : ''}
+                      </div>
+                    )}
                   </td>
                   <td>
                     {email.date ? (
@@ -195,6 +254,22 @@ export default function Dashboard() {
                   </td>
                   <td style={{ maxWidth: '300px', fontSize: '0.9rem' }}>
                     {email.summary}
+                  </td>
+                  <td>
+                    <select 
+                      className={styles.formInput}
+                      style={{ padding: '0.4rem', fontSize: '0.9rem', width: 'auto' }}
+                      value={email.status || 'Choose an option'}
+                      onChange={(e) => handleStatusChange(email.id, e.target.value)}
+                    >
+                      <option value="Choose an option">Choose an option</option>
+                      <option value="Applied">Applied</option>
+                      <option value="Not Applied">Not Applied</option>
+                      <option value="Not Eligible">Not Eligible</option>
+                      <option value="Shortlisted">Shortlisted</option>
+                      <option value="Interviewing">Interviewing</option>
+                      <option value="Rejected">Rejected</option>
+                    </select>
                   </td>
                   <td>
                     {email.date ? (
@@ -213,6 +288,39 @@ export default function Dashboard() {
           </table>
         </div>
       </section>
+      </div>
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className={styles.modalOverlay}>
+           <div className={`glass-panel ${styles.modal} animate-fade-in`}>
+             <div className={styles.modalHeader}>
+               <h3 className={styles.modalTitle}>Settings</h3>
+             </div>
+             
+             <div className={styles.formGroup}>
+               <label className={styles.formLabel}>Your Gemini API Key (Optional)</label>
+               <input 
+                 type="password" 
+                 className={styles.formInput} 
+                 value={apiKey}
+                 onChange={(e) => setApiKey(e.target.value)}
+                 placeholder="AIzaSy..."
+               />
+               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                 Leave blank to use the system default key. If you are a college mate, please use your own free key!
+               </p>
+             </div>
+             
+             <div className={styles.modalActions}>
+               <button className="btn btn-secondary" onClick={() => setShowSettings(false)}>Cancel</button>
+               <button className="btn btn-primary" onClick={handleSaveApiKey} disabled={savingKey}>
+                 {savingKey ? "Saving..." : "Save Key"}
+               </button>
+             </div>
+           </div>
+        </div>
+      )}
 
       {/* Edit Event Modal */}
       {selectedEvent && (
@@ -230,7 +338,7 @@ export default function Dashboard() {
               <input 
                 type="text" 
                 className={styles.formInput} 
-                value={`Interview: ${selectedEvent.company} - ${selectedEvent.role}`}
+                value={`Interview: ${selectedEvent.company || 'Placement'} - ${selectedEvent.role || ''}`}
                 onChange={() => {}}
               />
             </div>
@@ -273,6 +381,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

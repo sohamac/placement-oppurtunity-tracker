@@ -47,6 +47,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   placementEmails PlacementEmail[]
+  geminiApiKey  String?
 }
 
 model VerificationToken {
@@ -65,7 +66,8 @@ model PlacementEmail {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   emailId   String   @unique
-  company   String
+  subject   String
+  company   String?
   role      String?
   status    String   // "Applied", "Shortlisted", "Interviewing", "Rejected"
   date      String?  // Event Date (YYYY-MM-DD)
