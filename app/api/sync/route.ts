@@ -52,6 +52,16 @@ export async function POST() {
         continue;
       }
 
+      // Normalize status to match frontend exactly
+      let normalizedStatus = "Choose an option";
+      if (details.status) {
+        const titleCaseStatus = details.status.charAt(0).toUpperCase() + details.status.slice(1).toLowerCase();
+        const validStatuses = ['Applied', 'Shortlisted', 'Interviewing', 'Rejected'];
+        if (validStatuses.includes(titleCaseStatus)) {
+          normalizedStatus = titleCaseStatus;
+        }
+      }
+
       // 4. Save to Database (upsert to overwrite if it already exists with an error)
       await prisma.placementEmail.upsert({
         where: { emailId: email.id },
@@ -66,7 +76,7 @@ export async function POST() {
           subject: email.subject,
           company: details.company,
           role: details.role,
-          status: "Choose an option", // Set default to Choose an option per requirements
+          status: normalizedStatus, // Use the normalized status
           date: email.receivedDate, // Use the real received date
           time: email.receivedTime, // Use the real received time
           summary: details.summary

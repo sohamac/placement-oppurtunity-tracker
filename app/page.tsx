@@ -16,11 +16,14 @@ export default function Dashboard() {
   const [apiKey, setApiKey] = useState("");
   const [savingKey, setSavingKey] = useState(false);
 
-  // Fetch emails on load if authenticated
   const fetchEmails = async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/emails");
+      if (res.status === 401) {
+        window.location.href = '/api/auth/signin?callbackUrl=' + encodeURIComponent(window.location.pathname);
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         setEmails(data.emails || []);
@@ -92,6 +95,10 @@ export default function Dashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
+      if (res.status === 401) {
+        window.location.href = '/api/auth/signin?callbackUrl=' + encodeURIComponent(window.location.pathname);
+        return;
+      }
       if (!res.ok) {
         // Revert on failure
         fetchEmails();
@@ -101,6 +108,31 @@ export default function Dashboard() {
       console.error(err);
       fetchEmails();
       alert("Error updating status.");
+    }
+  };
+
+  const handleDelete = async (emailId: string) => {
+    if (!confirm("Are you sure you want to delete this email from your dashboard and trash it in Gmail?")) return;
+
+    // Optimistic UI update
+    setEmails(emails.filter(e => e.id !== emailId));
+    
+    try {
+      const res = await fetch(`/api/emails/${emailId}`, {
+        method: "DELETE"
+      });
+      if (res.status === 401) {
+        window.location.href = '/api/auth/signin?callbackUrl=' + encodeURIComponent(window.location.pathname);
+        return;
+      }
+      if (!res.ok) {
+        fetchEmails(); // Revert
+        alert("Failed to delete email.");
+      }
+    } catch (err) {
+      console.error(err);
+      fetchEmails();
+      alert("Error deleting email.");
     }
   };
 
@@ -121,7 +153,8 @@ export default function Dashboard() {
           title: `Interview: ${selectedEvent.company || 'Placement'} - ${selectedEvent.role || ''}`,
           date: selectedEvent.date,
           time: selectedEvent.time,
-          description: selectedEvent.summary
+          description: selectedEvent.summary,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
         })
       });
       
@@ -271,7 +304,7 @@ export default function Dashboard() {
                       <option value="Rejected">Rejected</option>
                     </select>
                   </td>
-                  <td>
+                  <td style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                     {email.date ? (
                       <button className="btn btn-secondary" onClick={() => openModal(email)}>
                         Review & Schedule
@@ -281,6 +314,19 @@ export default function Dashboard() {
                         No Action
                       </button>
                     )}
+                    <button 
+                      onClick={() => handleDelete(email.id)}
+                      style={{ 
+                        background: 'transparent', 
+                        border: 'none', 
+                        cursor: 'pointer', 
+                        fontSize: '1.2rem',
+                        opacity: 0.7,
+                      }}
+                      title="Delete email"
+                    >
+                      🗑️
+                    </button>
                   </td>
                 </tr>
               ))}

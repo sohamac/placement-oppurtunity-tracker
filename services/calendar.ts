@@ -7,6 +7,7 @@ export async function addEventToGoogleCalendar(
     date: string; // YYYY-MM-DD
     time: string; // HH:MM (24-hour)
     description: string;
+    timeZone?: string; // e.g. "Asia/Kolkata"
   }
 ) {
   const auth = new google.auth.OAuth2();
@@ -20,6 +21,8 @@ export async function addEventToGoogleCalendar(
   const startDateTime = new Date(`${eventDetails.date}T${eventDetails.time}:00`);
   // Assume a 1 hour default duration for interviews
   const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+  
+  const tz = eventDetails.timeZone || 'UTC';
 
   try {
     const response = await calendar.events.insert({
@@ -29,11 +32,11 @@ export async function addEventToGoogleCalendar(
         description: eventDetails.description,
         start: {
           dateTime: startDateTime.toISOString(),
-          timeZone: 'Asia/Kolkata', // Set to local timezone or determine dynamically
+          timeZone: tz,
         },
         end: {
           dateTime: endDateTime.toISOString(),
-          timeZone: 'Asia/Kolkata',
+          timeZone: tz,
         },
       },
     });
