@@ -48,7 +48,14 @@ export async function POST() {
       const details = await extractPlacementDetails(email.body, user.geminiApiKey);
       
       // If AI determined it is NOT placement related, skip saving it entirely
-      if (details.is_placement_related === false) {
+      if (details.is_placement_related !== true) {
+        console.log(`Skipping non-placement email: ${email.subject}`);
+        continue;
+      }
+
+      // GUARD: Validate required fields before saving
+      if (!details.summary || typeof details.summary !== 'string' || details.summary.trim().length === 0) {
+        console.warn(`AI returned empty summary for: ${email.subject}`);
         continue;
       }
 
@@ -66,15 +73,15 @@ export async function POST() {
       await prisma.placementEmail.upsert({
         where: { emailId: email.id },
         update: {
-          company: details.company,
-          role: details.role,
+          company: details.company ?? undefined,
+          role: details.role ?? undefined,
           summary: details.summary
         },
         create: {
           userId: user.id,
           emailId: email.id,
           subject: email.subject,
-          company: details.company,
+          company: details.company || 'Unknown Company',
           role: details.role,
           status: normalizedStatus, // Use the normalized status
           date: email.receivedDate, // Use the real received date

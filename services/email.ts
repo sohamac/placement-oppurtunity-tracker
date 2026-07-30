@@ -77,19 +77,34 @@ export async function fetchUnreadPlacementEmails(accessToken: string, existingEm
       };
 
       if (msgDetails.data.payload?.parts) {
-        // Find text/plain part
+        // Try text/plain first
         const textPart = msgDetails.data.payload.parts.find(part => part.mimeType === 'text/plain');
         if (textPart && textPart.body?.data) {
           body = decodeBase64Url(textPart.body.data);
         } else {
-          // Fallback to html or other part if text/plain is missing
-          const anyPart = msgDetails.data.payload.parts[0];
-          if (anyPart && anyPart.body?.data) {
-             body = decodeBase64Url(anyPart.body.data);
+          // Fallback to text/html and strip tags
+          const htmlPart = msgDetails.data.payload.parts.find(part => part.mimeType === 'text/html');
+          if (htmlPart && htmlPart.body?.data) {
+            const html = decodeBase64Url(htmlPart.body.data);
+            // Simple HTML tag stripping
+            body = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          } else {
+            // Last resort: any part with data
+            const anyPart = msgDetails.data.payload.parts.find(p => p.body?.data);
+            if (anyPart) body = decodeBase64Url(anyPart.body.data);
           }
         }
       } else if (msgDetails.data.payload?.body?.data) {
-        body = decodeBase64Url(msgDetails.data.payload.body.data);
+        const rawBody = decodeBase64Url(msgDetails.data.payload.body.data);
+        body = msgDetails.data.payload.mimeType === 'text/html' 
+          ? rawBody.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() 
+          : rawBody;
+      }
+
+      // GUARD: Skip emails with no extractable body
+      if (!body || body.trim().length < 20) {
+        console.warn(`Skipping email ${msg.id} — body too short or empty`);
+        continue;
       }
 
       emails.push({
