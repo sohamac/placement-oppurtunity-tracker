@@ -13,7 +13,9 @@ export default function Dashboard() {
   
   // Settings State
   const [showSettings, setShowSettings] = useState(false);
-  const [apiKey, setApiKey] = useState("");
+  const [aiProvider, setAiProvider] = useState('auto');
+  const [geminiKey, setGeminiKey] = useState('');
+  const [aiHealth, setAiHealth] = useState<Record<string, boolean>>({});
   const [savingKey, setSavingKey] = useState(false);
 
   const fetchEmails = async () => {
@@ -28,7 +30,10 @@ export default function Dashboard() {
         const data = await res.json();
         setEmails(data.emails || []);
         if (data.geminiApiKey) {
-          setApiKey(data.geminiApiKey);
+          setGeminiKey(data.geminiApiKey);
+        }
+        if (data.aiProvider) {
+          setAiProvider(data.aiProvider);
         }
       }
     } catch (err) {
@@ -41,6 +46,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (status === "authenticated") {
       fetchEmails();
+      fetch('/api/ai-health').then(r => r.json()).then(setAiHealth);
     }
   }, [status]);
 
@@ -66,20 +72,20 @@ export default function Dashboard() {
   const handleSaveApiKey = async () => {
     setSavingKey(true);
     try {
-      const res = await fetch("/api/user/key", {
+      const res = await fetch("/api/user/ai-preference", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey }),
+        body: JSON.stringify({ provider: aiProvider, apiKey: geminiKey }),
       });
       if (res.ok) {
-        alert("API Key saved securely!");
+        alert("AI preferences saved securely!");
         setShowSettings(false);
       } else {
-        alert("Failed to save API key.");
+        alert("Failed to save preferences.");
       }
     } catch (err) {
       console.error(err);
-      alert("Error saving API key.");
+      alert("Error saving preferences.");
     } finally {
       setSavingKey(false);
     }
@@ -341,27 +347,58 @@ export default function Dashboard() {
         <div className={styles.modalOverlay}>
            <div className={`glass-panel ${styles.modal} animate-fade-in`}>
              <div className={styles.modalHeader}>
-               <h3 className={styles.modalTitle}>Settings</h3>
+               <h3 className={styles.modalTitle}>🤖 AI Provider Settings</h3>
              </div>
+             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1rem' }}>
+               Choose how emails are analyzed. "Auto" picks the best available provider.
+             </p>
              
-             <div className={styles.formGroup}>
-               <label className={styles.formLabel}>Your Gemini API Key (Optional)</label>
-               <input 
-                 type="password" 
+             <div className={styles.formGroup} style={{ marginTop: '1rem' }}>
+               <label className={styles.formLabel}>AI Provider</label>
+               <select 
                  className={styles.formInput} 
-                 value={apiKey}
-                 onChange={(e) => setApiKey(e.target.value)}
-                 placeholder="AIzaSy..."
-               />
-               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-                 Leave blank to use the system default key. If you are a college mate, please use your own free key!
-               </p>
+                 value={aiProvider} 
+                 onChange={e => setAiProvider(e.target.value)}
+                 style={{ padding: '0.8rem' }}
+               >
+                 <option value="auto">⚡ Auto (Recommended)</option>
+                 <option value="ollama">🖥️ Ollama (Local - Unlimited, M2 Mac)</option>
+                 <option value="groq">☁️ Groq (Cloud - Fast, 1K/day)</option>
+                 <option value="openrouter">🌐 OpenRouter (Cloud - Free tier)</option>
+                 <option value="gemini">🔑 Gemini (Cloud - Your own key)</option>
+               </select>
+             </div>
+
+             {aiProvider === 'gemini' && (
+               <div className={styles.formGroup}>
+                 <label className={styles.formLabel}>Gemini API Key</label>
+                 <input
+                   className={styles.formInput}
+                   type="password"
+                   value={geminiKey}
+                   onChange={e => setGeminiKey(e.target.value)}
+                   placeholder="Paste your Gemini API key"
+                 />
+               </div>
+             )}
+
+             <div style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
+               <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Provider Status:</p>
+               {Object.entries(aiHealth).map(([name, ok]) => (
+                 <span key={name} style={{ 
+                   display: 'inline-block',
+                   marginRight: '0.75rem',
+                   color: ok ? '#10b981' : '#ef4444'
+                 }}>
+                   {ok ? '🟢' : '🔴'} {name}
+                 </span>
+               ))}
              </div>
              
-             <div className={styles.modalActions}>
+             <div className={styles.modalActions} style={{ marginTop: '1.5rem' }}>
                <button className="btn btn-secondary" onClick={() => setShowSettings(false)}>Cancel</button>
                <button className="btn btn-primary" onClick={handleSaveApiKey} disabled={savingKey}>
-                 {savingKey ? "Saving..." : "Save Key"}
+                 {savingKey ? "Saving..." : "Save AI Settings"}
                </button>
              </div>
            </div>

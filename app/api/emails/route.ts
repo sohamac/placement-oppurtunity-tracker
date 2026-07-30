@@ -25,7 +25,7 @@ export async function GET() {
       orderBy: { createdAt: 'desc' }
     });
     
-    return NextResponse.json({ emails, geminiApiKey: user.geminiApiKey });
+    return NextResponse.json({ emails, geminiApiKey: user.geminiApiKey, aiProvider: user.aiProvider });
   } catch (error) {
     console.error("Error fetching emails from DB:", error);
     return NextResponse.json({ error: "Failed to fetch emails" }, { status: 500 });
