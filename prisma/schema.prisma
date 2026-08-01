@@ -49,6 +49,7 @@ model User {
   placementEmails PlacementEmail[]
   geminiApiKey  String?
   aiProvider    String?   @default("auto") // auto | ollama | groq | openrouter | gemini
+  neoId         String?   // NeoID for Excel/Google Sheets filtering
 }
 
 model VerificationToken {

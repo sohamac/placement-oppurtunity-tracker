@@ -14,8 +14,12 @@ export const authOptions: NextAuthOptions = {
           prompt: "consent",
           access_type: "offline",
           response_type: "code",
-          // We need these specific scopes to read email and write to calendar
-          scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events"
+          approval_prompt: "force",
+          scope:
+            "openid email profile " +
+            "https://www.googleapis.com/auth/gmail.readonly " +
+            "https://www.googleapis.com/auth/calendar.events " +
+            "https://www.googleapis.com/auth/spreadsheets.readonly",
         }
       }
     })

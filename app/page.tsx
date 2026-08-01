@@ -18,9 +18,10 @@ export default function Dashboard() {
   const [aiProvider, setAiProvider] = useState('auto');
   const [geminiKeyInput, setGeminiKeyInput] = useState('');
   const [hasGeminiKey, setHasGeminiKey] = useState(false);
+  const [neoIdInput, setNeoIdInput] = useState('');
+  const [hasNeoId, setHasNeoId] = useState(false);
   const [aiHealth, setAiHealth] = useState<Record<string, boolean>>({});
   const [savingKey, setSavingKey] = useState(false);
-
   const fetchEmails = async () => {
     setLoading(true);
     try {
@@ -32,12 +33,6 @@ export default function Dashboard() {
       if (res.ok) {
         const data = await res.json();
         setEmails(data.emails || []);
-        if (data.hasGeminiKey !== undefined) {
-          setHasGeminiKey(data.hasGeminiKey);
-        }
-        if (data.aiProvider) {
-          setAiProvider(data.aiProvider);
-        }
       }
     } catch (err) {
       console.error(err);
@@ -45,6 +40,18 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
+
+  // Fetch profile (replaces your old ai-preference fetch)
+  useEffect(() => {
+    fetch('/api/user/profile')
+      .then((r) => r.json())
+      .then((data) => {
+        setAiProvider(data.aiProvider || 'auto');
+        setHasGeminiKey(data.hasGeminiKey);
+        setHasNeoId(data.hasNeoId);
+      })
+      .catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -74,27 +81,29 @@ export default function Dashboard() {
     }
   };
 
-  const handleSaveApiKey = async () => {
+  const handleSaveSettings = async () => {
     setSavingKey(true);
     try {
-      const res = await fetch("/api/user/ai-preference", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: aiProvider, apiKey: geminiKeyInput }),
+      const res = await fetch('/api/user/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: aiProvider,
+          geminiApiKey: geminiKeyInput || null,
+          neoId: neoIdInput || null,
+        }),
       });
-      if (res.ok) {
-        if (geminiKeyInput) {
-          setHasGeminiKey(true);
-        }
-        setGeminiKeyInput(''); // clear input after saving
-        alert("AI preferences saved securely!");
-        setShowSettings(false);
-      } else {
-        alert("Failed to save preferences.");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Error saving preferences.");
+
+      if (!res.ok) throw new Error('Save failed');
+
+      setHasGeminiKey(!!geminiKeyInput || hasGeminiKey);
+      setHasNeoId(!!neoIdInput || hasNeoId);
+      setGeminiKeyInput('');
+      setNeoIdInput('');
+      alert('Settings saved!');
+      setShowSettings(false);
+    } catch (e) {
+      alert('Failed to save settings.');
     } finally {
       setSavingKey(false);
     }
@@ -452,6 +461,34 @@ export default function Dashboard() {
                </div>
              )}
 
+             {/* NEO ID Input */}
+             <div style={{ marginTop: 16 }}>
+               <label style={{ display: 'block', marginBottom: 6, fontSize: 14, color: '#94a3b8' }}>
+                 NEO ID (for auto-detecting shortlists)
+               </label>
+               <input
+                 type="text"
+                 value={neoIdInput}
+                 onChange={(e) => setNeoIdInput(e.target.value.toUpperCase())}
+                 placeholder={hasNeoId ? '•••••••• (saved)' : 'e.g. D1E6F4Q6'}
+                 maxLength={16}
+                 style={{
+                   width: '100%',
+                   padding: '10px 14px',
+                   background: 'rgba(255,255,255,0.05)',
+                   border: '1px solid rgba(255,255,255,0.1)',
+                   borderRadius: 8,
+                   color: '#e2e8f0',
+                   fontSize: 14,
+                 }}
+               />
+               {hasNeoId && !neoIdInput && (
+                 <span style={{ fontSize: 12, color: '#4ade80', marginTop: 4, display: 'block' }}>
+                   ✓ NEO ID saved
+                 </span>
+               )}
+             </div>
+
              <div style={{ marginTop: '1rem', fontSize: '0.85rem' }}>
                <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Provider Status:</p>
                {Object.entries(aiHealth).map(([name, ok]) => (
@@ -467,8 +504,8 @@ export default function Dashboard() {
              
              <div className={styles.modalActions} style={{ marginTop: '1.5rem' }}>
                <button className="btn btn-secondary" onClick={() => setShowSettings(false)}>Cancel</button>
-               <button className="btn btn-primary" onClick={handleSaveApiKey} disabled={savingKey}>
-                 {savingKey ? "Saving..." : "Save AI Settings"}
+               <button className="btn btn-primary" onClick={handleSaveSettings} disabled={savingKey}>
+                 {savingKey ? "Saving..." : "Save Settings"}
                </button>
              </div>
            </div>

@@ -1,6 +1,5 @@
 import { google } from 'googleapis';
 
-// ── Concurrency helper (no new dependency needed) ──
 async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,
@@ -8,22 +7,30 @@ async function mapWithConcurrency<T, R>(
 ): Promise<R[]> {
   const results = new Array<R>(items.length);
   let idx = 0;
-
   async function worker() {
     while (idx < items.length) {
       const i = idx++;
       results[i] = await fn(items[i], i);
     }
   }
-
   await Promise.all(Array.from({ length: limit }, worker));
   return results;
+}
+
+export interface FetchedEmail {
+  id: string;
+  subject: string;
+  body: string;
+  receivedDate: string | null;
+  receivedTime: string | null;
+  attachments: { filename: string; attachmentId: string; mimeType: string }[];
+  sheetUrls: string[];
 }
 
 export async function fetchUnreadPlacementEmails(
   accessToken: string,
   existingEmailIds: string[] = []
-) {
+): Promise<FetchedEmail[]> {
   const auth = new google.auth.OAuth2();
   auth.setCredentials({ access_token: accessToken });
   const gmail = google.gmail({ version: 'v1', auth });
@@ -52,7 +59,6 @@ export async function fetchUnreadPlacementEmails(
 
     if (allMessages.length === 0) return [];
 
-    // Filter out already-synced IDs before fetching details
     const newMessages = allMessages.filter(
       (msg) => msg.id && !existingEmailIds.includes(msg.id)
     );
@@ -61,7 +67,6 @@ export async function fetchUnreadPlacementEmails(
 
     if (newMessages.length === 0) return [];
 
-    // ── PARALLEL FETCH: up to 5 at a time (Gmail quota safe) ──
     const emails = await mapWithConcurrency(newMessages, 5, async (msg) => {
       const msgDetails = await gmail.users.messages.get({
         userId: 'me',
@@ -87,11 +92,33 @@ export async function fetchUnreadPlacementEmails(
         receivedTime = d.toTimeString().split(' ')[0].substring(0, 5);
       }
 
-      // Extract body
-      let body = '';
       const decodeBase64Url = (str: string) =>
         Buffer.from(str.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
 
+      // ── Extract raw HTML before stripping (for sheet URLs) ──
+      let rawHtml = '';
+      if (msgDetails.data.payload?.parts) {
+        const htmlPart = msgDetails.data.payload.parts.find(
+          (p: any) => p.mimeType === 'text/html'
+        );
+        if (htmlPart?.body?.data) {
+          rawHtml = decodeBase64Url(htmlPart.body.data);
+        }
+      } else if (msgDetails.data.payload?.mimeType === 'text/html' && msgDetails.data.payload.body?.data) {
+        rawHtml = decodeBase64Url(msgDetails.data.payload.body.data);
+      }
+
+      // Extract Google Sheets URLs
+      const sheetUrls: string[] = [];
+      const sheetMatches = rawHtml.match(
+        /https:\/\/docs\.google\.com\/spreadsheets\/d\/[a-zA-Z0-9_-]+/g
+      );
+      if (sheetMatches) {
+        sheetUrls.push(...sheetMatches);
+      }
+
+      // ── Extract body (text) ──
+      let body = '';
       if (msgDetails.data.payload?.parts) {
         const textPart = msgDetails.data.payload.parts.find(
           (p: any) => p.mimeType === 'text/plain'
@@ -123,16 +150,27 @@ export async function fetchUnreadPlacementEmails(
         return null;
       }
 
+      // ── Extract attachments ──
+      const attachments = (msgDetails.data.payload?.parts || [])
+        .filter((p: any) => p.filename && p.body?.attachmentId)
+        .map((p: any) => ({
+          filename: p.filename,
+          attachmentId: p.body.attachmentId,
+          mimeType: p.mimeType,
+        }));
+
       return {
         id: msg.id,
         subject: subject || 'No Subject',
         body: body.substring(0, 3000),
         receivedDate,
         receivedTime,
+        attachments,
+        sheetUrls,
       };
     });
 
-    return emails.filter((e): e is NonNullable<typeof e> => e !== null);
+    return emails.filter((e): e is FetchedEmail => e !== null);
   } catch (error) {
     console.error('Error fetching from Gmail API:', error);
     throw new Error('Failed to fetch emails from Gmail');
