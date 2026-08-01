@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { fetchUnreadPlacementEmails } from '@/services/email';
 import { extractPlacementDetails } from '@/services/ai';
+import { getValidAccessToken } from './cron/route';
 
 export async function POST() {
   try {
@@ -18,8 +19,13 @@ export async function POST() {
     });
 
     const googleAccount = user?.accounts.find(a => a.provider === 'google');
-    if (!googleAccount || !googleAccount.access_token) {
+    if (!googleAccount) {
       return NextResponse.json({ error: 'No Google account connected' }, { status: 400 });
+    }
+
+    const accessToken = await getValidAccessToken(googleAccount);
+    if (!accessToken) {
+      return NextResponse.json({ error: 'Failed to refresh Google token. Please log in again.' }, { status: 401 });
     }
 
     const existingEmails = await prisma.placementEmail.findMany({
@@ -34,7 +40,7 @@ export async function POST() {
     });
     const existingIds = existingEmails.map(e => e.emailId);
 
-    const emails = await fetchUnreadPlacementEmails(googleAccount.access_token, existingIds);
+    const emails = await fetchUnreadPlacementEmails(accessToken, existingIds);
     let processedCount = 0;
     const providersUsed = new Set<string>();
 
