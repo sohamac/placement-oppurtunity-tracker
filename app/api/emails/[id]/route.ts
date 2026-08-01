@@ -4,8 +4,9 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { google } from 'googleapis';
 
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -22,7 +23,7 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
 
     // Find the email in the DB first so we get the real Gmail ID
     const emailToDelete = await prisma.placementEmail.findFirst({
-      where: { id: params.id, userId: user.id }
+      where: { id: id, userId: user.id }
     });
 
     if (!emailToDelete) {
@@ -31,7 +32,7 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
 
     // Delete from database
     await prisma.placementEmail.delete({
-      where: { id: params.id }
+      where: { id: id }
     });
 
     // Optionally mark as read in Gmail so it doesn't get re-synced if it's unread

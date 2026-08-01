@@ -5,9 +5,10 @@ import { prisma } from '@/lib/prisma';
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -30,7 +31,7 @@ export async function POST(
 
     const updatedEmail = await prisma.placementEmail.update({
       where: { 
-        id: params.id,
+        id: id,
         userId: user.id
       },
       data: { status }
