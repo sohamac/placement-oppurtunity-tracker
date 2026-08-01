@@ -12,6 +12,7 @@ export default function Dashboard() {
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   
   // Settings State
+  const [showSettings, setShowSettings] = useState(false);
   const [aiProvider, setAiProvider] = useState('auto');
   const [geminiKeyInput, setGeminiKeyInput] = useState('');
   const [hasGeminiKey, setHasGeminiKey] = useState(false);
