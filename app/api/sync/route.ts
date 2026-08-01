@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { fetchUnreadPlacementEmails } from '@/services/email';
 import { extractPlacementDetails } from '@/services/ai';
 import { getValidAccessToken } from './cron/route';
+import { decrypt } from '@/lib/crypto';
 
 // ── Concurrency helper ──
 async function mapWithConcurrency<T, R>(
@@ -69,9 +70,11 @@ export async function POST() {
 
     // ── PARALLEL AI PROCESSING: 3 at a time ──
     await mapWithConcurrency(emails, 3, async (email) => {
+      const rawGeminiKey = user.geminiApiKey ? decrypt(user.geminiApiKey) : null;
+      
       const details = await extractPlacementDetails(email.body, {
         preferredProvider: (user.aiProvider as any) || 'auto',
-        userGeminiKey: user.geminiApiKey,
+        userGeminiKey: rawGeminiKey,
       });
 
       providersUsed.add((details as any)._provider || 'unknown');

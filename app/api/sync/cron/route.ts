@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { fetchUnreadPlacementEmails } from '@/services/email';
 import { extractPlacementDetails } from '@/services/ai';
+import { decrypt } from '@/lib/crypto';
 
 // ── Token Refresh Helper ──
 async function refreshGoogleToken(account: {
@@ -115,9 +116,11 @@ export async function GET(request: Request) {
 
         // Process each email with AI
         for (const email of emails) {
+          const rawGeminiKey = user.geminiApiKey ? decrypt(user.geminiApiKey) : null;
+          
           const details = await extractPlacementDetails(email.body, {
             preferredProvider: (user.aiProvider as any) || 'auto',
-            userGeminiKey: user.geminiApiKey,
+            userGeminiKey: rawGeminiKey,
           });
 
           if (details.is_placement_related === false) continue;
