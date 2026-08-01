@@ -6,6 +6,26 @@ import { fetchUnreadPlacementEmails } from '@/services/email';
 import { extractPlacementDetails } from '@/services/ai';
 import { getValidAccessToken } from './cron/route';
 
+// ── Concurrency helper ──
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let idx = 0;
+
+  async function worker() {
+    while (idx < items.length) {
+      const i = idx++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+
+  await Promise.all(Array.from({ length: limit }, worker));
+  return results;
+}
+
 export async function POST() {
   try {
     const session = await getServerSession(authOptions);
@@ -41,22 +61,27 @@ export async function POST() {
     const existingIds = existingEmails.map(e => e.emailId);
 
     const emails = await fetchUnreadPlacementEmails(accessToken, existingIds);
-    let processedCount = 0;
+    if (emails.length === 0) {
+      return NextResponse.json({ success: true, processedCount: 0, providers: [] });
+    }
+
     const providersUsed = new Set<string>();
 
-    for (const email of emails) {
+    // ── PARALLEL AI PROCESSING: 3 at a time ──
+    await mapWithConcurrency(emails, 3, async (email) => {
       const details = await extractPlacementDetails(email.body, {
         preferredProvider: (user.aiProvider as any) || 'auto',
         userGeminiKey: user.geminiApiKey,
       });
-      
-      providersUsed.add(details._provider);
 
-      if (details.is_placement_related === false) continue;
+      providersUsed.add((details as any)._provider || 'unknown');
+      if (details.is_placement_related === false) return;
 
-      let normalizedStatus = "Choose an option";
+      let normalizedStatus = 'Applied';
       if (details.status) {
-        const titleCase = details.status.charAt(0).toUpperCase() + details.status.slice(1).toLowerCase();
+        const titleCase =
+          details.status.charAt(0).toUpperCase() +
+          details.status.slice(1).toLowerCase();
         if (['Applied', 'Shortlisted', 'Interviewing', 'Rejected'].includes(titleCase)) {
           normalizedStatus = titleCase;
         }
@@ -67,7 +92,8 @@ export async function POST() {
         update: {
           company: details.company ?? undefined,
           role: details.role ?? undefined,
-          summary: details.summary
+          summary: details.summary,
+          status: normalizedStatus,
         },
         create: {
           userId: user.id,
@@ -78,15 +104,14 @@ export async function POST() {
           status: normalizedStatus,
           date: email.receivedDate,
           time: email.receivedTime,
-          summary: details.summary
-        }
+          summary: details.summary,
+        },
       });
-      processedCount++;
-    }
+    });
 
     return NextResponse.json({ 
       success: true, 
-      processedCount,
+      processedCount: emails.length,
       providers: Array.from(providersUsed)
     });
   } catch (error) {

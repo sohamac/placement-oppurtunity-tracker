@@ -9,6 +9,7 @@ export default function Dashboard() {
   const [emails, setEmails] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [syncCount, setSyncCount] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   
   // Settings State
@@ -53,14 +54,16 @@ export default function Dashboard() {
 
   const handleSync = async () => {
     setSyncing(true);
+    setSyncCount(0);
     try {
       const res = await fetch("/api/sync", { method: "POST" });
-      if (res.ok) {
-        const data = await res.json();
-        alert(`Successfully synced ${data.processedCount} new emails!`);
-        fetchEmails(); // Refresh list
+      const data = await res.json();
+      
+      if (!res.ok) {
+        alert(data.error || "Failed to sync emails.");
       } else {
-         alert("Failed to sync emails.");
+        setSyncCount(data.processedCount || 0);
+        await fetchEmails(); // refresh list
       }
     } catch (err) {
       console.error(err);
@@ -218,17 +221,22 @@ export default function Dashboard() {
               ⚙️ Settings
             </button>
             <button 
-              className="btn btn-primary" 
+              className={`btn btn-primary ${styles.btnWithSpinner}`}
               onClick={handleSync}
               disabled={syncing}
             >
               {syncing ? (
                 <>
-                  <div className={styles.spinner}></div>
+                  <span className={styles.spinner}></span>
                   Syncing...
                 </>
               ) : "Sync Emails"}
             </button>
+            {!syncing && syncCount > 0 && (
+              <span style={{ marginLeft: '12px', color: '#4ade80', fontSize: '14px', whiteSpace: 'nowrap' }}>
+                ✓ {syncCount} emails synced
+              </span>
+            )}
             <button className="btn btn-secondary" onClick={() => signOut()}>
               Logout
             </button>

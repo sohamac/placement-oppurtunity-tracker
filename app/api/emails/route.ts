@@ -13,7 +13,7 @@ export async function GET() {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email }
+      where: { email: session.user.email },
     });
 
     if (!user) {
@@ -22,16 +22,19 @@ export async function GET() {
 
     const emails = await prisma.placementEmail.findMany({
       where: { userId: user.id },
-      orderBy: { createdAt: 'desc' }
+      orderBy: [
+        { date: 'desc' },      // Most recent email date first
+        { createdAt: 'desc' }, // Tie-breaker
+      ],
     });
-    
-    return NextResponse.json({ 
-      emails, 
+
+    return NextResponse.json({
+      emails,
       hasGeminiKey: !!user.geminiApiKey,
-      aiProvider: user.aiProvider 
+      aiProvider: user.aiProvider,
     });
   } catch (error) {
-    console.error("Error fetching emails from DB:", error);
-    return NextResponse.json({ error: "Failed to fetch emails" }, { status: 500 });
+    console.error('Error fetching emails from DB:', error);
+    return NextResponse.json({ error: 'Failed to fetch emails' }, { status: 500 });
   }
 }

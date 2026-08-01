@@ -1,50 +1,68 @@
 import { google } from 'googleapis';
 
-export async function fetchUnreadPlacementEmails(accessToken: string, existingEmailIds: string[] = []) {
+// ── Concurrency helper (no new dependency needed) ──
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let idx = 0;
+
+  async function worker() {
+    while (idx < items.length) {
+      const i = idx++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+
+  await Promise.all(Array.from({ length: limit }, worker));
+  return results;
+}
+
+export async function fetchUnreadPlacementEmails(
+  accessToken: string,
+  existingEmailIds: string[] = []
+) {
   const auth = new google.auth.OAuth2();
   auth.setCredentials({ access_token: accessToken });
-
   const gmail = google.gmail({ version: 'v1', auth });
 
-  console.log("Fetching unread placement emails from Gmail API...");
+  console.log('Fetching unread placement emails from Gmail API...');
 
   try {
     const query = `newer_than:2m -category:promotions -category:social -label:newsletter (subject:interview OR subject:placement OR subject:shortlisted OR subject:application OR subject:"online test" OR subject:hiring)`;
-    
+
     let allMessages: any[] = [];
     let pageToken: string | undefined = undefined;
-    
-    // Fetch up to 5 pages (500 emails)
+
     for (let i = 0; i < 5; i++) {
       const response = await gmail.users.messages.list({
         userId: 'me',
         q: query,
         maxResults: 100,
-        pageToken: pageToken,
+        pageToken,
       });
-
       if (response.data.messages) {
         allMessages = allMessages.concat(response.data.messages);
       }
-      
       pageToken = response.data.nextPageToken as string | undefined;
       if (!pageToken) break;
     }
 
-    if (allMessages.length === 0) {
-      return [];
-    }
+    if (allMessages.length === 0) return [];
 
-    const emails = [];
+    // Filter out already-synced IDs before fetching details
+    const newMessages = allMessages.filter(
+      (msg) => msg.id && !existingEmailIds.includes(msg.id)
+    );
 
-    for (const msg of allMessages) {
-      if (!msg.id) continue;
-      
-      // Skip emails we already have in the database!
-      if (existingEmailIds.includes(msg.id)) {
-        continue;
-      }
+    console.log(`Found ${allMessages.length} emails, ${newMessages.length} new.`);
 
+    if (newMessages.length === 0) return [];
+
+    // ── PARALLEL FETCH: up to 5 at a time (Gmail quota safe) ──
+    const emails = await mapWithConcurrency(newMessages, 5, async (msg) => {
       const msgDetails = await gmail.users.messages.get({
         userId: 'me',
         id: msg.id,
@@ -52,18 +70,17 @@ export async function fetchUnreadPlacementEmails(accessToken: string, existingEm
       });
 
       const headers = msgDetails.data.payload?.headers;
-      const subjectHeader = headers?.find(h => h.name === 'Subject');
-      const dateHeader = headers?.find(h => h.name === 'Date');
-      
+      const subjectHeader = headers?.find((h: any) => h.name === 'Subject');
+      const dateHeader = headers?.find((h: any) => h.name === 'Date');
+
       const subject = subjectHeader ? subjectHeader.value : 'No Subject';
-      
-      // Parse received date directly from email headers
+
       let receivedDate = null;
       let receivedTime = null;
-      if (dateHeader && dateHeader.value) {
+      if (dateHeader?.value) {
         const d = new Date(dateHeader.value);
-        receivedDate = d.toISOString().split('T')[0]; // YYYY-MM-DD
-        receivedTime = d.toTimeString().split(' ')[0].substring(0, 5); // HH:MM
+        receivedDate = d.toISOString().split('T')[0];
+        receivedTime = d.toTimeString().split(' ')[0].substring(0, 5);
       } else if (msgDetails.data.internalDate) {
         const d = new Date(Number(msgDetails.data.internalDate));
         receivedDate = d.toISOString().split('T')[0];
@@ -72,53 +89,52 @@ export async function fetchUnreadPlacementEmails(accessToken: string, existingEm
 
       // Extract body
       let body = '';
-      const decodeBase64Url = (str: string) => {
-        return Buffer.from(str.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
-      };
+      const decodeBase64Url = (str: string) =>
+        Buffer.from(str.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
 
       if (msgDetails.data.payload?.parts) {
-        // Try text/plain first
-        const textPart = msgDetails.data.payload.parts.find(part => part.mimeType === 'text/plain');
-        if (textPart && textPart.body?.data) {
+        const textPart = msgDetails.data.payload.parts.find(
+          (p: any) => p.mimeType === 'text/plain'
+        );
+        if (textPart?.body?.data) {
           body = decodeBase64Url(textPart.body.data);
         } else {
-          // Fallback to text/html and strip tags
-          const htmlPart = msgDetails.data.payload.parts.find(part => part.mimeType === 'text/html');
-          if (htmlPart && htmlPart.body?.data) {
+          const htmlPart = msgDetails.data.payload.parts.find(
+            (p: any) => p.mimeType === 'text/html'
+          );
+          if (htmlPart?.body?.data) {
             const html = decodeBase64Url(htmlPart.body.data);
-            // Simple HTML tag stripping
             body = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
           } else {
-            // Last resort: any part with data
-            const anyPart = msgDetails.data.payload.parts.find(p => p.body?.data);
+            const anyPart = msgDetails.data.payload.parts.find((p: any) => p.body?.data);
             if (anyPart) body = decodeBase64Url(anyPart.body.data);
           }
         }
       } else if (msgDetails.data.payload?.body?.data) {
-        const rawBody = decodeBase64Url(msgDetails.data.payload.body.data);
-        body = msgDetails.data.payload.mimeType === 'text/html' 
-          ? rawBody.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() 
-          : rawBody;
+        const raw = decodeBase64Url(msgDetails.data.payload.body.data);
+        body =
+          msgDetails.data.payload.mimeType === 'text/html'
+            ? raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+            : raw;
       }
 
-      // GUARD: Skip emails with no extractable body
       if (!body || body.trim().length < 20) {
-        console.warn(`Skipping email ${msg.id} — body too short or empty`);
-        continue;
+        console.warn(`Skipping email ${msg.id} — body too short`);
+        return null;
       }
 
-      emails.push({
+      return {
         id: msg.id,
         subject: subject || 'No Subject',
-        body: body.substring(0, 3000), // Trim to avoid token limits
+        body: body.substring(0, 3000),
         receivedDate,
-        receivedTime
-      });
-    }
+        receivedTime,
+      };
+    });
 
-    return emails;
+    return emails.filter((e): e is NonNullable<typeof e> => e !== null);
   } catch (error) {
-    console.error("Error fetching from Gmail API:", error);
-    throw new Error("Failed to fetch emails from Gmail");
+    console.error('Error fetching from Gmail API:', error);
+    throw new Error('Failed to fetch emails from Gmail');
   }
 }
