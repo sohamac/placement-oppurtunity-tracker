@@ -12,9 +12,9 @@ export default function Dashboard() {
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   
   // Settings State
-  const [showSettings, setShowSettings] = useState(false);
   const [aiProvider, setAiProvider] = useState('auto');
-  const [geminiKey, setGeminiKey] = useState('');
+  const [geminiKeyInput, setGeminiKeyInput] = useState('');
+  const [hasGeminiKey, setHasGeminiKey] = useState(false);
   const [aiHealth, setAiHealth] = useState<Record<string, boolean>>({});
   const [savingKey, setSavingKey] = useState(false);
 
@@ -29,8 +29,8 @@ export default function Dashboard() {
       if (res.ok) {
         const data = await res.json();
         setEmails(data.emails || []);
-        if (data.geminiApiKey) {
-          setGeminiKey(data.geminiApiKey);
+        if (data.hasGeminiKey !== undefined) {
+          setHasGeminiKey(data.hasGeminiKey);
         }
         if (data.aiProvider) {
           setAiProvider(data.aiProvider);
@@ -75,9 +75,13 @@ export default function Dashboard() {
       const res = await fetch("/api/user/ai-preference", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: aiProvider, apiKey: geminiKey }),
+        body: JSON.stringify({ provider: aiProvider, apiKey: geminiKeyInput }),
       });
       if (res.ok) {
+        if (geminiKeyInput) {
+          setHasGeminiKey(true);
+        }
+        setGeminiKeyInput(''); // clear input after saving
         alert("AI preferences saved securely!");
         setShowSettings(false);
       } else {
@@ -375,10 +379,13 @@ export default function Dashboard() {
                  <input
                    className={styles.formInput}
                    type="password"
-                   value={geminiKey}
-                   onChange={e => setGeminiKey(e.target.value)}
-                   placeholder="Paste your Gemini API key"
+                   value={geminiKeyInput}
+                   onChange={e => setGeminiKeyInput(e.target.value)}
+                   placeholder={hasGeminiKey ? "•••••••• (key saved)" : "Paste your Gemini API key"}
                  />
+                 {hasGeminiKey && !geminiKeyInput && (
+                   <span style={{ color: '#10b981', fontSize: '0.8rem' }}>✓ Key already saved</span>
+                 )}
                </div>
              )}
 
