@@ -2,20 +2,32 @@ import { GoogleGenAI } from '@google/genai';
 import ollama from 'ollama';
 import OpenAI from 'openai';
 
-// ── Provider Clients ──
-const openrouter = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: process.env.OPENROUTER_API_KEY || '',
-  defaultHeaders: {
-    'HTTP-Referer': process.env.NEXTAUTH_URL || 'http://localhost:3000',
-    'X-Title': 'Placement Opportunity Tracker',
-  },
-});
+// ── Lazy Provider Clients ──
+let _openrouter: OpenAI | null = null;
+function getOpenRouter() {
+  if (!_openrouter) {
+    _openrouter = new OpenAI({
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey: process.env.OPENROUTER_API_KEY || 'sk-dummy',
+      defaultHeaders: {
+        'HTTP-Referer': process.env.NEXTAUTH_URL || 'http://localhost:3000',
+        'X-Title': 'Placement Opportunity Tracker',
+      },
+    });
+  }
+  return _openrouter;
+}
 
-const groq = new OpenAI({
-  baseURL: 'https://api.groq.com/openai/v1',
-  apiKey: process.env.GROQ_API_KEY || '',
-});
+let _groq: OpenAI | null = null;
+function getGroq() {
+  if (!_groq) {
+    _groq = new OpenAI({
+      baseURL: 'https://api.groq.com/openai/v1',
+      apiKey: process.env.GROQ_API_KEY || 'sk-dummy',
+    });
+  }
+  return _groq;
+}
 
 // ── Types ──
 export interface ExtractedDetails {
@@ -59,7 +71,7 @@ async function tryOllama(emailBody: string): Promise<ExtractedDetails> {
 
 // ── Groq Provider ──
 async function tryGroq(emailBody: string): Promise<ExtractedDetails> {
-  const response = await groq.chat.completions.create({
+  const response = await getGroq().chat.completions.create({
     model: 'llama-3.1-8b-instant',
     messages: [{ role: 'user', content: buildPrompt(emailBody) }],
     response_format: { type: 'json_object' },
@@ -73,7 +85,7 @@ async function tryGroq(emailBody: string): Promise<ExtractedDetails> {
 
 // ── OpenRouter Provider ──
 async function tryOpenRouter(emailBody: string): Promise<ExtractedDetails> {
-  const response = await openrouter.chat.completions.create({
+  const response = await getOpenRouter().chat.completions.create({
     model: 'meta-llama/llama-3.3-70b-instruct:free',
     messages: [{ role: 'user', content: buildPrompt(emailBody) }],
     response_format: { type: 'json_object' },
