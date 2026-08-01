@@ -11,6 +11,7 @@ export default function Dashboard() {
   const [syncing, setSyncing] = useState(false);
   const [syncCount, setSyncCount] = useState(0);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'Shortlisted' | 'Interviewing'>('all');
   
   // Settings State
   const [showSettings, setShowSettings] = useState(false);
@@ -204,6 +205,11 @@ export default function Dashboard() {
     );
   }
 
+  const filteredEmails =
+    statusFilter === 'all'
+      ? emails
+      : emails.filter((e) => e.status?.toLowerCase() === statusFilter.toLowerCase());
+
   return (
     <>
       <div className={styles.dashboard}>
@@ -243,20 +249,56 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <section className={`${styles.statsGrid} animate-fade-in`}>
-          <div className={`glass-card ${styles.statCard}`}>
-            <span className={styles.statLabel}>Total Applications</span>
-            <span className={styles.statValue}>{emails.length}</span>
+        {/* Stats Row */}
+        <div className={styles.statsGrid}>
+          {/* Total Applications — click to reset */}
+          <div
+            className={`glass-card ${styles.statCard} ${statusFilter === 'all' ? styles.activeCard : ''}`}
+            onClick={() => setStatusFilter('all')}
+            style={{ cursor: 'pointer' }}
+          >
+            <div className={styles.statLabel}>Total Applications</div>
+            <div className={styles.statValue}>{emails.length}</div>
           </div>
-          <div className={`glass-card ${styles.statCard}`}>
-            <span className={styles.statLabel}>Shortlisted</span>
-            <span className={styles.statValue}>{emails.filter(e => e.status?.toLowerCase() === 'shortlisted').length}</span>
+
+          {/* Shortlisted — click to filter */}
+          <div
+            className={`glass-card ${styles.statCard} ${statusFilter === 'Shortlisted' ? styles.activeCard : ''}`}
+            onClick={() =>
+              setStatusFilter((prev) => (prev === 'Shortlisted' ? 'all' : 'Shortlisted'))
+            }
+            style={{ cursor: 'pointer' }}
+          >
+            <div className={styles.statLabel}>Shortlisted</div>
+            <div className={styles.statValue}>
+              {emails.filter((e) => e.status?.toLowerCase() === 'shortlisted').length}
+            </div>
           </div>
-          <div className={`glass-card ${styles.statCard}`}>
-            <span className={styles.statLabel}>Interviews</span>
-            <span className={styles.statValue}>{emails.filter(e => e.status?.toLowerCase() === 'interviewing').length}</span>
+
+          {/* Interviews — click to filter */}
+          <div
+            className={`glass-card ${styles.statCard} ${statusFilter === 'Interviewing' ? styles.activeCard : ''}`}
+            onClick={() =>
+              setStatusFilter((prev) => (prev === 'Interviewing' ? 'all' : 'Interviewing'))
+            }
+            style={{ cursor: 'pointer' }}
+          >
+            <div className={styles.statLabel}>Interviews</div>
+            <div className={styles.statValue}>
+              {emails.filter((e) => e.status?.toLowerCase() === 'interviewing').length}
+            </div>
           </div>
-        </section>
+        </div>
+
+        {/* Active filter indicator */}
+        {statusFilter !== 'all' && (
+          <div className={styles.filterBar}>
+            Showing: <strong>{statusFilter}</strong>
+            <button className={styles.clearFilter} onClick={() => setStatusFilter('all')}>
+              Clear filter
+            </button>
+          </div>
+        )}
 
         <section className="animate-fade-in">
           <h2 className={styles.sectionTitle}>Recent Updates</h2>
@@ -280,7 +322,14 @@ export default function Dashboard() {
                      </td>
                    </tr>
                 )}
-                {emails.map((email) => (
+                {!loading && filteredEmails.length === 0 && statusFilter !== 'all' && (
+                  <tr>
+                    <td colSpan={5} className={styles.emptyCell}>
+                      No {statusFilter.toLowerCase()} emails found.
+                    </td>
+                  </tr>
+                )}
+                {filteredEmails.map((email) => (
                   <tr key={email.id}>
                     <td style={{ maxWidth: '250px' }}>
                       <strong>

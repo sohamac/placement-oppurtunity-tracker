@@ -149,3 +149,54 @@
   justify-content: center;
   gap: 8px;
 }
+
+.statCard {
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.statCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.activeCard {
+  border: 1px solid rgba(129, 140, 248, 0.5); /* indigo-400 glow */
+  background: rgba(129, 140, 248, 0.08);
+  box-shadow: 0 0 20px rgba(129, 140, 248, 0.15);
+}
+
+.filterBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 20px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  font-size: 14px;
+  color: #e2e8f0;
+}
+
+.clearFilter {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clearFilter:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.emptyCell {
+  text-align: center;
+  padding: 32px;
+  color: #94a3b8;
+  font-style: italic;
+}
