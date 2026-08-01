@@ -200,3 +200,25 @@
   color: #94a3b8;
   font-style: italic;
 }
+
+.gmailLink {
+  color: #e2e8f0;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s;
+}
+
+.gmailLink:hover {
+  color: #818cf8; /* indigo-400 */
+  text-decoration: underline;
+}
+
+.subjectCell {
+  padding: 16px;
+}
+
+.metaLine {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 4px;
+}

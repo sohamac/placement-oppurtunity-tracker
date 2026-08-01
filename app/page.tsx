@@ -331,18 +331,23 @@ export default function Dashboard() {
                 )}
                 {filteredEmails.map((email) => (
                   <tr key={email.id}>
-                    <td style={{ maxWidth: '250px' }}>
-                      <strong>
-                        <a href={`https://mail.google.com/mail/u/0/#inbox/${email.emailId}`} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline', color: 'inherit' }}>
-                          {email.subject}
-                        </a>
-                      </strong>
-                    {email.company && email.company !== 'Unknown Company' && (
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                        {email.company} {email.role ? `- ${email.role}` : ''}
-                      </div>
-                    )}
-                  </td>
+                    <td className={styles.subjectCell}>
+                      <a
+                        href={`https://mail.google.com/mail/u/0/#all/${email.emailId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.gmailLink}
+                        title="Open in Gmail"
+                      >
+                        <strong>{email.subject}</strong>
+                      </a>
+
+                      {email.company && email.company !== 'Unknown Company' && (
+                        <div className={styles.metaLine}>
+                          {email.company} {email.role ? `— ${email.role}` : ''}
+                        </div>
+                      )}
+                    </td>
                   <td>
                     {email.date ? (
                       <>
